@@ -1,0 +1,62 @@
+{
+  "name": "proveit",
+  "version": "0.5.0",
+  "description": "A local mathematical research workspace connecting Codex and Lean",
+  "main": "desktop/main.cjs",
+  "author": "honghongzhong",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/honghongzhong/Prove-It.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "build:backend": "python tools/build_backend.py",
+    "dist": "npm run build:backend && electron-builder --win nsis zip --x64 --publish never",
+    "test:export": "node tests/test_export.mjs",
+    "postinstall": "node node_modules/electron/install.js"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.honghongzhong.proveit",
+    "productName": "ProveIt",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "desktop/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "build/backend/proveit-backend",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "artifactName": "ProveIt-${version}-windows-${arch}.${ext}",
+      "icon": "desktop/icon.ico",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "ProveIt-${version}-windows-${arch}-setup.${ext}"
+    },
+    "compression": "normal"
+  },
+  "type": "module"
+}

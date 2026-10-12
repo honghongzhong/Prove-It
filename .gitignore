@@ -1,0 +1,30 @@
+# Private workspaces and generated state
+.proveit/
+proofs/
+lean4/
+mathlib/
+.lake/
+.codex/
+.env
+.env.*
+!.env.example
+*.sqlite*
+*.db
+*.log
+*.pem
+*.key
+*credentials*
+*token*.json
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+dist/
+build/
+release/
+.DS_Store
+Thumbs.db
+# Local audit notes contain machine paths / historical session references
+docs/*validation*.md
+AGENTS.md

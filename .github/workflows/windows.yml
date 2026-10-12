@@ -1,0 +1,31 @@
+name: Build Windows desktop
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-build.txt
+      - run: npm ci
+      - run: python tools/release_audit.py
+      - run: node tests/test_export.mjs
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProveIt-windows-x64
+          path: |
+            dist/*-setup.exe
+            dist/*-x64.zip
+          if-no-files-found: error

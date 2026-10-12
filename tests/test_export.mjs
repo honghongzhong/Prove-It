@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict';
+import {researchMarkdown} from '../ui/js/export.js';
+const bundle={exportedAt:'2026-10-11',proof:{title:'Test',source:'-- ```\ntheorem target : True := by trivial',natural_proof:'$$\\sum_{k=1}^n k$$'},research:{goal:{natural:'Goal',formalType:'True',targetName:'target'},steps:[],checks:[{createdAt:'now',projectId:'standalone',sourceHash:'abc',result:{axioms:[],diagnostics:[]}}],targetVerified:true,verificationCurrent:false,goalReviewed:false},timeline:[{kind:'assistant',content:'Before tool'},{kind:'tool',tool:'read',content:'{}',status:'completed'},{kind:'assistant',content:'After tool'}]};
+const en=researchMarkdown(bundle,'en'),zh=researchMarkdown(bundle,'zh');
+assert.match(en,/Evidence out of date/); assert.match(en,/Pending review/);assert.ok(en.includes(bundle.proof.natural_proof));assert.ok(en.includes('````lean'));assert.ok(en.indexOf('Before tool')<en.indexOf('Tool call'));assert.ok(en.indexOf('Tool call')<en.indexOf('After tool'));assert.match(zh,/证据已过期/);assert.ok(!en.includes('undefined'));console.log('Markdown export: 8 assertions passed');
