@@ -393,7 +393,7 @@ def save_notes(filename: str, content: str) -> dict:
 
 
 def get_settings() -> dict:
-    defaults = {"autoSave": True, "autoVerify": False, "theme": "light", "language": "zh"}
+    defaults = {"autoSave": True, "autoVerify": False, "theme": "light", "language": "en", "provider": "codex", "baseUrl": "https://api.openai.com/v1", "apiModel": "", "codexPath": "", "autoSetupLean": True, "environmentProxy": ""}
     with _connect() as connection:
         for row in connection.execute("SELECT key,value FROM settings"):
             try:
@@ -405,13 +405,18 @@ def get_settings() -> dict:
 
 def save_settings(payload: dict) -> dict:
     current = get_settings()
-    for key in ("autoSave", "autoVerify"):
+    for key in ("autoSave", "autoVerify", "autoSetupLean"):
         if key in payload:
             current[key] = bool(payload[key])
     if payload.get("theme") in {"light", "dark"}:
         current["theme"] = payload["theme"]
     if payload.get("language") in {"zh", "en"}:
         current["language"] = payload["language"]
+    if payload.get("provider") in {"codex", "api"}:
+        current["provider"] = payload["provider"]
+    for key in ("baseUrl", "apiModel", "codexPath", "environmentProxy"):
+        if key in payload:
+            current[key] = str(payload[key]).strip()[:2048]
     for key in ("model", "effort"):
         if key in payload:
             current[key] = str(payload[key])[:100]
@@ -462,3 +467,13 @@ def rename_conversation(filename: str, title: str) -> dict:
         if not cursor.rowcount:
             raise ValueError("Conversation not found.")
     return get_proof(name)
+
+
+def remove_research_project(project_id: str) -> dict:
+    """Remove a grouping while preserving all conversations, including trash."""
+    with _connect() as db:
+        if not db.execute("SELECT 1 FROM research_projects WHERE id=?", (project_id,)).fetchone():
+            raise ValueError("Project not found.")
+        db.execute("UPDATE proofs SET project_id=NULL WHERE project_id=?", (project_id,))
+        db.execute("DELETE FROM research_projects WHERE id=?", (project_id,))
+    return {"removed": project_id}

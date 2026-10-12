@@ -57,6 +57,11 @@ class ProductTests(unittest.TestCase):
                 with WorkspaceLease(2000): pass
         with WorkspaceLease(2000): pass
 
+    def test_english_default_preserves_saved_chinese(self):
+        self.assertEqual(workspace.get_settings()['language'], 'en')
+        workspace.save_settings({'language': 'zh'})
+        self.assertEqual(workspace.get_settings()['language'], 'zh')
+
     def test_unfinished_events_and_complete_export(self):
         research.timeline_write('Test.lean', 'pending', 'tool', 'partial', 'running', 'read')
         entries = research.timeline_interrupt('Test.lean')

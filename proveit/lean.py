@@ -105,6 +105,12 @@ def _verify_file(candidate: Path, project_id: str) -> dict:
     if timeout <= 0:
         raise ValueError("PROVEIT_LEAN_TIMEOUT 必须大于 0。")
     command.extend(["--timeout", str(timeout)])
+    from .environments import runtime_env
+    environment = runtime_env(project_id)
+    if environment.get("LEAN_EXE"):
+        command.extend(["--lean", environment["LEAN_EXE"]])
+    if environment.get("LAKE_EXE"):
+        command.extend(["--lake", environment["LAKE_EXE"]])
     project = project_path(project_id)
     if project is not None:
         command.extend(["--project", str(project)])
@@ -113,7 +119,7 @@ def _verify_file(candidate: Path, project_id: str) -> dict:
         command,
         cwd=ROOT,
         stdin=subprocess.DEVNULL,
-        env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"} if getattr(sys, "frozen", False) else None,
+        env={**environment, "PYINSTALLER_RESET_ENVIRONMENT": "1"} if getattr(sys, "frozen", False) else environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

@@ -1,5 +1,5 @@
 /** Render a portable research report without changing math delimiters or source. */
-export function researchMarkdown(bundle, language = "zh") {
+export function researchMarkdown(bundle, language = "en") {
   const en = language === "en",
     pick = (zh, enText) => (en ? enText : zh);
   const p = bundle.proof,

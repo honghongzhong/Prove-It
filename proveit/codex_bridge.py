@@ -14,10 +14,30 @@ import subprocess
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 from .lean import ROOT, verify, project_path
 from . import research, workspace
 from .research_tools import SYSTEM_PROMPT, tools
+
+
+def find_codex():
+    configured = workspace.get_settings().get("codexPath") or os.environ.get("CODEX_EXE")
+    if configured:
+        return shutil.which(configured) or (configured if Path(configured).is_file() else None)
+    found = shutil.which("codex")
+    if found:
+        if Path(found).suffix.lower() in {".cmd", ".bat", ".ps1"}:
+            package = Path(found).parent / "node_modules" / "@openai" / "codex"
+            binaries = list(package.glob("**/codex.exe")) if package.is_dir() else []
+            if binaries:
+                return str(max(binaries, key=lambda p: p.stat().st_mtime))
+        else:
+            return found
+    # Explorer does not inherit terminal profile PATH updates.
+    root = Path(os.environ.get("LOCALAPPDATA", "")) / "OpenAI" / "Codex" / "bin"
+    candidates = list(root.glob("*/codex.exe")) if root.is_dir() else []
+    return str(max(candidates, key=lambda p: p.stat().st_mtime)) if candidates else None
 
 
 class CodexBridge:
@@ -57,7 +77,7 @@ class CodexBridge:
         with self.start_lock:
             if self.process and self.process.poll() is None:
                 return
-            executable = os.environ.get("CODEX_EXE") or shutil.which("codex")
+            executable = find_codex()
             if not executable:
                 raise RuntimeError("未找到 Codex CLI。请安装并通过 codex login 登录。")
             self.loaded_threads.clear()
@@ -233,11 +253,18 @@ class CodexBridge:
     def _select_thread(self, proof_id):
         state = research.get(proof_id)
         stored = state["threadId"]
+        schema_hash = research.digest(tools())
         self.recovered_session = False
         if stored and stored not in self.loaded_threads:
             try:
                 self.call("thread/resume", {"threadId": stored, "cwd": str(workspace.DATA_ROOT),
                     "approvalPolicy": "on-request", "sandbox": "read-only"})
+                # Dynamic tools belong to thread/start and cannot be changed by
+                # thread/resume. Preserve local history when upgrading the tools.
+                if state.get("toolSchemaHash") != schema_hash:
+                    research.set_runtime(proof_id, previousThreadIds=[*state.get("previousThreadIds", []), stored][-30:])
+                    stored = None
+                    self.recovered_session = True
             except RuntimeError as exc:
                 # Writer conflicts are not fixed by interrupting or deleting somebody else's thread.
                 if not any(reason in str(exc).lower() for reason in ('active writer', 'no rollout found', 'thread not found')):
@@ -249,17 +276,22 @@ class CodexBridge:
             reply = self.call("thread/start", {"cwd": str(workspace.DATA_ROOT), "approvalPolicy": "on-request",
                 "sandbox": "read-only", "dynamicTools": tools()})
             stored = reply["thread"]["id"]
-            research.set_runtime(proof_id, threadId=stored)
+            research.set_runtime(proof_id, threadId=stored, toolSchemaHash=schema_hash)
         self.loaded_threads.add(stored)
         self.thread_id = stored
         if self.recovered_session:
             entry = research.timeline_write(proof_id, 'session-'+stored, 'recovery', '', 'completed')
             self.publish({'method':'research/timeline','params':{'entry':entry,'proofId':proof_id}})
 
-    def send_message(self, text, context, project_id, proof_id="", language="zh", model="", effort=""):
+    def send_message(self, text, context, project_id, proof_id="", language="en", model="", effort=""):
         workspace.get_proof(proof_id)
         project_path(project_id)
-        if model:
+        if workspace.get_settings().get("provider") == "api":
+            from .model_api import validate, read_key
+            validate(workspace.get_settings())
+            if not read_key():
+                raise ValueError("Configure an API key in Settings.")
+        elif model:
             models = self.models_cache or self.models()
             selected = next((m for m in models if m.get('model') == model), None)
             if not selected:
@@ -328,13 +360,16 @@ class CodexBridge:
                     self.verifying = False
                     self.publish({"method": "research/idle", "params": {}})
 
-    def _run(self, text, project_id, proof_id, language="zh", model="", effort=""):
+    def _run(self, text, project_id, proof_id, language="en", model="", effort=""):
+        if workspace.get_settings().get("provider") == "api":
+            return self._run_api(text, project_id, proof_id, language)
         self.start()
         self._select_thread(proof_id)
         research.set_runtime(proof_id, projectId=project_id, runStatus="running", runReason="")
         maximum = max(1, min(int(os.environ.get("PROVEIT_MAX_TURNS", "8")), 100))
         previous = None
-        for attempt in range(1, maximum + 1):
+        prose_attempts = 0
+        for attempt in range(1, maximum + 4):
             if self.cancel.is_set():
                 break
             self.retry_attempt = attempt
@@ -343,10 +378,15 @@ class CodexBridge:
             state = research.get(proof_id)
             state["checks"] = state["checks"][-1:]
             proof = workspace.get_proof(proof_id)
+            finalizing = state["targetVerified"] and not proof["natural_proof"].strip()
+            if attempt > maximum and not finalizing:
+                break
             proof = {k: proof[k] for k in ("id", "title", "description", "source", "natural_proof")}
             prompt = SYSTEM_PROMPT + "\n研究者要求：" + text + "\n当前状态：" + json.dumps({
                 "research": state, "proof": proof, "sourceHash": research.artifact_hash(proof)}, ensure_ascii=False)
             prompt += "\nWrite new researcher-facing responses and research prose in " + ("English." if language == "en" else "Chinese.")
+            if finalizing:
+                prompt += "\n" + self._prose_prompt(proof_id)
             if attempt > 1:
                 prompt += "\n继续推进同一目标，读取上次真实诊断；不要重复没有新信息的尝试。"
             self.publish({"method": "codex/prompt", "params": {"prompt": prompt, "attempt": attempt}})
@@ -384,8 +424,14 @@ class CodexBridge:
                 raise RuntimeError(str(turn.get("error") or turn["status"]))
             state = research.get(proof_id)
             if state["targetVerified"]:
-                research.set_runtime(proof_id, runStatus="completed", runReason="登记的形式目标已经 Lean 验证；请继续人工审阅。")
-                return
+                if self._complete_research(proof_id, language):
+                    return
+                if finalizing:
+                    prose_attempts += 1
+                if prose_attempts >= 3:
+                    self._prose_blocked(proof_id, language)
+                    return
+                continue
             if state["runStatus"] == "blocked":
                 return
             proof = workspace.get_proof(proof_id)
@@ -398,6 +444,35 @@ class CodexBridge:
         reason = "研究者已暂停。" if self.cancel.is_set() else f"本次已完成 {maximum} 轮；进展已保存，可继续研究。"
         research.set_runtime(proof_id, runStatus="paused", runReason=reason)
 
+    def _prose_prompt(self, proof_id):
+        proof = workspace.get_proof(proof_id)
+        state = research.get(proof_id)
+        return ("The registered target already passed Lean, but the saved natural-language proof is empty. "
+                "Finish the research document now: call proveit_get_research for the current sourceHash, "
+                "then use proveit_propose_natural_proof or proveit_modify_natural_proof to SAVE a complete "
+                "reader-facing proof explaining the verified theorem, assumptions, mathematical steps and conclusion. "
+                "A chat response alone does not save it. Preserve the verified Lean code and target; "
+                "do not change human review. Current authoritative context: " + json.dumps({
+                    "goal": state["goal"], "source": proof["source"],
+                    "naturalProof": proof["natural_proof"], "sourceHash": research.artifact_hash(proof)}, ensure_ascii=False))
+
+    def _complete_research(self, proof_id, language):
+        with self.artifact_lock, research.LOCK:
+            if self.cancel.is_set() or not research.get(proof_id)["targetVerified"]:
+                return False
+            if not workspace.get_proof(proof_id)["natural_proof"].strip():
+                return False
+            research.set_runtime(proof_id, runStatus="completed", runReason=(
+                "形式目标已通过 Lean 验证，自然语言证明已保存；含义与意义仍需人工审阅。" if language == "zh" else
+                "Lean verified the registered target and the natural-language proof is saved; human review remains separate."))
+            return True
+
+    def _prose_blocked(self, proof_id, language):
+        research.set_runtime(proof_id, runStatus="blocked", runReason=(
+            "Lean 已验证目标，但自然语言证明尚未保存；自动补写未成功，请继续研究以补齐证明正文。" if language == "zh" else
+            "Lean verified the target, but the natural-language proof has not been saved. Automatic completion failed; continue research to finish the document."))
+        self.publish({"method": "research/updated", "params": {}})
+
     def _tool(self, event):
         params = event.get("params", {})
         tool, args = params.get("tool", ""), params.get("arguments", {})
@@ -409,7 +484,7 @@ class CodexBridge:
                 raise ValueError("轮次已结束或被打断，请在新轮次读取最新状态。")
             if not isinstance(args, dict):
                 raise ValueError("工具参数必须是对象。")
-            if tool in {"proveit_verify_lean", "proveit_check_candidate"}:
+            if tool in {"proveit_verify_lean", "proveit_check_candidate", "proveit_get_environments", "proveit_setup_environment"}:
                 result = self._execute(tool, args, proof_id, project_id)
             else:
                 with self.artifact_lock:
@@ -426,7 +501,21 @@ class CodexBridge:
             pass
 
     def _execute(self, tool, args, proof_id, project_id):
+        from . import environments
         proof = workspace.get_proof(proof_id)
+        project_id = research.get(proof_id)["projectId"]
+        if tool == "proveit_get_environments":
+            return environments.status()
+        if tool == "proveit_setup_environment":
+            if not workspace.get_settings().get("autoSetupLean", True):
+                raise ValueError("Automatic environment setup is disabled in Settings.")
+            result = environments.manager.wait(args.get("preset"), self.cancel)
+            self.current_project_id = result.get("projectId", "standalone")
+            if self.cancel.is_set():
+                raise ValueError("Research was paused; the environment is available for a later run.")
+            research.set_runtime(proof_id, projectId=self.current_project_id)
+            self.publish({"method": "research/updated", "params": {}})
+            return result
         if tool == "proveit_get_research":
             state = research.get(proof_id)
             state["checks"] = state["checks"][-1:]
@@ -442,6 +531,13 @@ class CodexBridge:
             source = args.get("code", "")
             if not isinstance(source, str) or not source.strip() or len(source) > 200000:
                 raise ValueError("Lean 源码为空或过长。")
+            if tool == "proveit_verify_lean" and source != proof["source"]:
+                raise ValueError("Save the candidate before verifying it.")
+            project_id = environments.prepare(source, project_id, self.cancel)
+            if self.cancel.is_set():
+                raise ValueError("Research paused before Lean verification.")
+            self.current_project_id = project_id
+            research.set_runtime(proof_id, projectId=project_id)
             if tool == "proveit_check_candidate":
                 return {"candidateOnly": True, "result": verify(source, project_id)}
             if source != proof["source"]:
@@ -462,6 +558,8 @@ class CodexBridge:
             if is_code:
                 result = workspace.save_proof(proof_id, {**proof, "source": args["code"]})
             else:
+                if not isinstance(args["content"], str) or not args["content"].strip():
+                    raise ValueError("Save a nonempty natural-language proof, not a blank placeholder.")
                 result = workspace.save_natural_proof(proof_id, args["content"])
             self.publish({"method": "proof/artifactUpdated", "params": {
                 "kind": "leanCode" if is_code else "naturalProof", "operation": "modify",
@@ -471,3 +569,64 @@ class CodexBridge:
             raise ValueError("未知 ProveIt 工具。")
         self.publish({"method": "research/updated", "params": {}})
         return result
+
+    def _run_api(self, text, project_id, proof_id, language):
+        from .model_api import complete
+        import uuid
+        config = workspace.get_settings()
+        research.set_runtime(proof_id, projectId=project_id, runStatus="running", runReason="")
+        self.publish({"method": "turn/started", "params": {}})
+        messages = [{"role": "system", "content": SYSTEM_PROMPT + "\nRespond in " + ("Chinese." if language == "zh" else "English.")}]
+        messages += [{"role": m["role"], "content": m["content"]} for m in research.messages(proof_id)[-30:] if m["role"] in {"user", "assistant"}]
+        allowed = {t["name"] for t in tools()}
+        prose_attempts = 0
+        for attempt in range(1, 28):
+            if self.cancel.is_set(): break
+            state = research.get(proof_id)
+            finalizing = state["targetVerified"] and not workspace.get_proof(proof_id)["natural_proof"].strip()
+            if attempt > 24 and not finalizing:
+                break
+            if finalizing:
+                messages.append({"role": "system", "content": self._prose_prompt(proof_id)})
+            self.retry_attempt = attempt
+            reply = complete(config, messages, tools())
+            if self.cancel.is_set(): break
+            calls = reply.get("tool_calls") or []
+            if len(calls) > 16: raise RuntimeError("API returned too many tool calls.")
+            content = reply.get("content") or ""
+            if not isinstance(content, str): raise RuntimeError("Invalid API message content.")
+            messages.append({"role": "assistant", "content": content, **({"tool_calls": calls} if calls else {})})
+            if content:
+                research.message(proof_id, "assistant", content)
+                self.publish({"method": "research/updated", "params": {}})
+            for call in calls:
+                if self.cancel.is_set(): break
+                name = call.get("function", {}).get("name", "")
+                status = "completed"
+                try:
+                    args = json.loads(call["function"]["arguments"])
+                    if name not in allowed or not isinstance(args, dict): raise ValueError("Unknown tool or invalid arguments.")
+                    if name in {"proveit_verify_lean", "proveit_check_candidate", "proveit_get_environments", "proveit_setup_environment"}:
+                        result = self._execute(name, args, proof_id, project_id)
+                    else:
+                        with self.artifact_lock:
+                            if self.cancel.is_set(): break
+                            result = self._execute(name, args, proof_id, project_id)
+                except (ValueError, RuntimeError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
+                    result, status = {"error": str(exc)}, "failed"
+                entry = research.timeline_write(proof_id, "api:" + uuid.uuid4().hex, "tool", json.dumps(result, ensure_ascii=False)[:16000], status, name)
+                self.publish({"method": "research/timeline", "params": {"entry": entry}})
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)})
+            state = research.get(proof_id)
+            if state["targetVerified"]:
+                if self._complete_research(proof_id, language):
+                    return
+                if finalizing:
+                    prose_attempts += 1
+                if prose_attempts >= 3:
+                    self._prose_blocked(proof_id, language)
+                    return
+                continue
+            if state["runStatus"] == "blocked": return
+            if not calls: break
+        research.set_runtime(proof_id, runStatus="paused", runReason="Paused by researcher." if self.cancel.is_set() else "API turn finished or reached its tool budget. Continue with a new direction.")

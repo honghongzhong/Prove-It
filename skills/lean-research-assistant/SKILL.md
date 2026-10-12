@@ -5,6 +5,8 @@ description: Propose and refine mathematical proof ideas with a local Lean 4 ver
 
 # Lean Research Assistant
 
+English · [简体中文](SKILL.zh-CN.md)
+
 Use the model for mathematical exploration and Lean for checking the exact formal proposition. Keep the human in control of the research direction and theorem statement.
 
 ## Workflow
@@ -45,7 +47,7 @@ Use the model for mathematical exploration and Lean for checking the exact forma
 
 For each attempt, show:
 
-1. **想法** — concise mathematical strategy.
-2. **形式化命题** — the exact Lean theorem and its assumptions.
-3. **Lean 检查** — verified / rejected / unavailable, with a brief reason.
-4. **边界** — translation fidelity, novelty, or significance questions still requiring human judgment.
+1. **Idea** — concise mathematical strategy.
+2. **Formal statement** — the exact Lean theorem and its assumptions.
+3. **Lean check** — verified / rejected / unavailable, with a brief reason.
+4. **Boundaries** — translation fidelity, novelty, or significance questions still requiring human judgment.

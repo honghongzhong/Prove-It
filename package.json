@@ -1,6 +1,6 @@
 {
   "name": "proveit",
-  "version": "0.5.0",
+  "version": "0.7.1",
   "description": "A local mathematical research workspace connecting Codex and Lean",
   "main": "desktop/main.cjs",
   "author": "honghongzhong",
@@ -54,7 +54,14 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "ProveIt-${version}-windows-${arch}-setup.${ext}"
+      "artifactName": "ProveIt-${version}-windows-${arch}-setup.${ext}",
+      "installerLanguages": [
+        "en_US",
+        "zh_CN"
+      ],
+      "language": "1033",
+      "displayLanguageSelector": true,
+      "include": "desktop/installer.nsh"
     },
     "compression": "normal"
   },

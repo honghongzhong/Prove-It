@@ -28,6 +28,9 @@ def smoke(executable):
                 with urllib.request.urlopen(req, timeout=60) as response:
                     return json.load(response)
             assert request('/api/proofs')['proofs'] == []
+            assert request('/api/settings')['settings']['language'] == 'en'
+            request('/api/settings', {'language': 'zh'}, 'PUT')
+            assert request('/api/settings')['settings']['language'] == 'zh'
             source = 'theorem release_target : ∀ n : Nat, n = n := by intro n; rfl'
             request('/api/proofs', {'filename': 'Smoke.lean', 'title': 'Release test', 'source': source})
             request('/api/proofs/Smoke.lean/workflow', {'revision': 0, 'goal': {

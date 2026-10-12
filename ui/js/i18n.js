@@ -1,5 +1,51 @@
 /** All application-owned copy lives here; research content is never auto-translated. */
 const copy = {
+  environmentMissingHint: ["Lean 环境尚未就绪。检查证明时可自动安装，也可以现在一键配置。", "Lean is not ready. Missing environments can be installed automatically when checking, or configured now."],
+  manageEnvironments: ["Lean 环境", "Lean environments"],
+  environmentManager: ["环境管理", "Environment manager"],
+  environmentIntro: ["一键配置 Lean 核心或 Mathlib。优先复用匹配版本的现有安装，缺失时下载；安装后会实际运行 Lean 检查。", "Set up Lean core or Mathlib in one click. Matching existing installations are reused; missing components are downloaded and checked with real Lean."],
+  environmentCore: ["Lean 核心", "Lean core"],
+  environmentMathlib: ["Mathlib 常用数学环境", "Mathlib mathematics environment"],
+  environmentCoreHint: ["Lean、Lake、标准库。新安装下载约 850 MB，至少需要 4 GB 空间。", "Lean, Lake and the standard library. A fresh download is about 850 MB; at least 4 GB free space is required."],
+  environmentMathlibHint: ["Mathlib、Batteries、Aesop、Qq 及匹配依赖和编译缓存。至少需要 8 GB 空间。", "Mathlib, Batteries, Aesop, Qq, matching dependencies and compiled caches. At least 8 GB free space is required."],
+  setupEnvironment: ["安装 / 检查", "Set up / Check"],
+  environmentReady: ["已就绪", "Ready"],
+  environmentMissing: ["未配置", "Not configured"],
+  autoSetupLean: ["自动配置缺失的常用 Lean 环境（允许下载）", "Automatically set up missing common Lean environments (allow downloads)"],
+  environmentProxy: ["下载代理（可选，例如 http://127.0.0.1:10808）", "Download proxy (optional, e.g. http://127.0.0.1:10808)"],
+  environmentJobHint: ["进度百分比表示当前阶段；可取消，重试会复用已下载内容。", "Percentages describe the current stage. Cancel is available; retries reuse downloaded content."],
+  environmentOpen: ["查看安装进度", "View setup progress"],
+  env_queued: ["等待安装", "Queued"],
+  env_checking: ["检查现有环境", "Checking existing environment"],
+  env_downloading: ["下载", "Downloading"],
+  env_checksum: ["校验文件", "Checking archive checksum"],
+  env_extracting: ["解压", "Extracting"],
+  env_cloning: ["下载 Mathlib 源码", "Downloading Mathlib sources"],
+  env_dependencies: ["配置依赖及编译缓存", "Fetching dependencies and cache"],
+  env_verifying: ["运行 Lean 检查", "Running Lean checks"],
+  env_ready: ["安装完成，检查通过", "Setup complete; checks passed"],
+  env_failed: ["安装失败，可重试", "Setup failed; retry available"],
+  env_cancelled: ["安装已取消，可继续", "Setup cancelled; can resume"],
+  env_interrupted: ["安装被中断，可继续", "Setup interrupted; can resume"],
+
+  connectionSetup: ["连接模型", "Connect a model"],
+  connectionHint: ["选择 Codex 或填写自己的 API。未连接时仍可查看和编辑本地研究。", "Choose Codex or configure your own API. Local research remains available while disconnected."],
+  provider: ["模型来源", "Model provider"],
+  customApi: ["自定义 API（OpenAI 兼容）", "Custom API (OpenAI compatible)"],
+  baseUrl: ["Base URL（通常以 /v1 结尾）", "Base URL (usually ends in /v1)"],
+  apiModel: ["Model Name", "Model name"],
+  apiKey: ["API Key（留空保留已有密钥）", "API key (leave blank to keep saved key)"],
+  clearKey: ["删除已保存密钥", "Remove saved key"],
+  codexPath: ["Codex 可执行文件路径（可选）", "Codex executable path (optional)"],
+  codexGuide: ["在 PowerShell 安装：npm install -g @openai/codex；然后运行 codex login。若已安装但无法找到，请填入 codex.exe 的完整路径，然后保存并测试连接。ProveIt 会自行建立工作会话，无需在 Codex 中另建项目。", "In PowerShell: npm install -g @openai/codex, then run codex login. If detection fails, enter the full codex.exe path, save and test. ProveIt creates its own working session; a separate Codex project is unnecessary."],
+  testConnection: ["保存并测试连接", "Save and test connection"],
+  connectionReady: ["模型连接已就绪", "Model connection ready"],
+  connectionOffline: ["模型未连接 · 点击设置", "Model disconnected · Open settings"],
+  generalSettings: ["外观与编辑", "Appearance and editing"],
+  modelSettings: ["模型连接", "Model connection"],
+  deleteProject: ["移除项目分组", "Remove project grouping"],
+  deleteProjectHint: ["研究对话会保留并移到未分组列表。", "Research conversations will be retained and moved to Ungrouped."],
+
   toolCompleted: ["已完成", "Completed"],
   model: ["模型", "Model"],
   defaultModel: ["Codex 默认模型", "Codex default"],
@@ -13,7 +59,7 @@ const copy = {
   ultra: ["极高", "Ultra"],
   minimal: ["最少", "Minimal"],
   interrupted: ["已中断", "Interrupted"],
-  thinking: ["Codex 正在思考", "Codex is thinking"],
+  thinking: ["模型正在工作", "Model is working"],
   loadingModels: ["正在读取模型…", "Loading models…"],
   modelError: ["无法读取模型列表，点击重试", "Cannot load models. Retry"],
   sessionRecovered: [
@@ -294,9 +340,9 @@ const copy = {
   add: ["添加", "Add"],
   savedChanges: ["修改已保存", "Changes saved"],
 };
-let language = "zh";
+let language = "en";
 export function setLanguage(value) {
-  language = value === "en" ? "en" : "zh";
+  language = value === "zh" ? "zh" : "en";
   document.documentElement.lang = language === "en" ? "en" : "zh-CN";
 }
 export function getLanguage() {

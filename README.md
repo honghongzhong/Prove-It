@@ -29,7 +29,7 @@ The release is **unsigned**, so Windows may display an unknown-publisher prompt.
 - **Research:** manage the natural-language goal, assumptions, complete formal target, proof outline and written argument. Human review is recorded separately.
 - **Lean:** edit source, select the verification environment and inspect real diagnostics and evidence tied to the current artifacts.
 - **Export:** save Lean source, a readable Markdown report or a JSON record containing revision history.
-- **Appearance:** English and Chinese interfaces, light and dark themes, locally hosted fonts and KaTeX math rendering.
+- **Appearance:** English by default for new installations, with Chinese available in Settings; light and dark themes, locally hosted fonts and KaTeX math rendering.
 
 ## Research workflow
 
@@ -75,6 +75,26 @@ Codex receives the research and context you submit under your own account, provi
 
 ## Contributing and license
 
-[Issues](https://github.com/honghongzhong/Prove-It/issues) and focused contributions are welcome. Remove private research, tokens and local paths from reports. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+[Issues](https://github.com/honghongzhong/Prove-It/issues) and focused contributions are welcome. Remove private research, tokens and local paths from reports. See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and the [language policy](docs/LANGUAGE_POLICY.md).
 
 Released under the repository's existing [MIT License](LICENSE). Third-party license information is retained in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the distributed dependencies.
+
+### Use your own API model
+
+Open Settings → Model connection → Custom API. Enter an API key, an OpenAI-compatible Base URL (including `/v1` when required), and the exact model name. Save and test performs a small inference request and may incur provider charges. Codex is not required in this mode. The endpoint must support Chat Completions and function calling for research tools. Remote endpoints require HTTPS; HTTP is allowed for localhost.
+
+Windows encrypts the key with user-scoped DPAPI in the local data directory; it is excluded from settings responses and research exports. A blank key field preserves the saved key; Remove saved key deletes it. API responses use bounded tool iterations; Pause prevents subsequent artifact writes after an in-flight request returns (network timeout: 60 seconds).
+
+When no model connection is ready, startup opens the connection guide. ProveIt detects the Codex installation, checks account state, and creates its own working sessions. You may also specify a Codex executable path in Settings. Project grouping can be renamed or removed without deleting its research conversations.
+
+### Automatic Lean environments
+
+Open **Lean environments** in the sidebar to install or check Lean core or Mathlib. ProveIt reuses a matching, runnable installation first; otherwise it downloads an official Windows x64 Lean/Lake distribution into the application's data directory. Mathlib setup also fetches its pinned dependencies and compiled cache, and downloads portable Git when Git is missing. Lean and Mathlib are pinned together to v4.34.1. Downloaded Lean and Git archives are checked against fixed SHA-256 digests before extraction. A real Lean smoke check is required before an environment is reported ready.
+
+The default **Automatically set up missing common Lean environments** setting lets research tools prepare environments. Code importing Mathlib in the core environment automatically selects the configured Mathlib project when checked. Both Codex and custom API models can inspect environments and call the fixed `core` or `mathlib` setup tools; they cannot choose arbitrary installer URLs, commands or paths. Disable the setting to require manual setup through the environment manager. User projects and global toolchain defaults are preserved.
+
+Setup jobs show stage progress and logs, support cancellation and retry, and resume partial archive downloads when the server supports byte ranges. Interrupted jobs are marked interrupted after restart and can be retried. Pausing research stops that research from waiting or changing its artifacts; shared setup may continue, and can be cancelled separately in the environment manager. A download proxy can be set in Settings. Fresh Lean downloads are approximately 850 MB; reserve at least 4 GB for Lean and 8 GB for Mathlib (actual requirements depend on the cache). The application installer includes the downloader; environments are downloaded on demand and require network access on first setup.
+
+See [Lean releases](https://github.com/leanprover/lean4/releases/tag/v4.34.1) and the [Mathlib project guide](https://leanprover-community.github.io/install/project.html) for upstream sources and cache behavior.
+
+Research completion requires both the registered Lean target to be verified and a nonempty natural-language proof saved in the research document. If the model omits the prose, ProveIt requests up to three focused follow-up turns to save it. If unsuccessful, the session reports the missing document while retaining Lean evidence. Prose quality and fidelity still require human review.

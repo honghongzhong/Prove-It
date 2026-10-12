@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -26,9 +26,9 @@
         </div>
         <nav id="project-list"></nav>
         <footer>
-          <button id="trash" data-i18n="trash"></button
+          <button id="environments" data-i18n="manageEnvironments"></button><button id="trash" data-i18n="trash"></button
           ><button id="settings" data-i18n="settings"></button
-          ><small data-i18n="local"></small>
+          ><button id="connection-status" class="connection-status" data-i18n="connectionOffline"></button><small data-i18n="local"></small>
         </footer>
       </aside>
       <button id="scrim" data-i18n-label="closeSidebar"></button>
@@ -56,7 +56,7 @@
           ><button role="tab" data-view="lean" data-i18n="lean"></button
           ><span id="run-state" role="status"></span>
         </div>
-        <div id="content"></div>
+        <div id="environment-notice" hidden><span data-i18n="environmentMissingHint"></span><button id="environment-notice-open" data-i18n="environmentOpen"></button></div><div id="content"></div>
         <section id="composer">
           <textarea
             id="prompt"

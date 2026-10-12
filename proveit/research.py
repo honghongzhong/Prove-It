@@ -33,7 +33,15 @@ def environment(project_id: str) -> str:
     import os
     files = {name: (path / name).read_text(encoding="utf-8") if (path / name).is_file() else ""
              for name in ("lean-toolchain", "lake-manifest.json", "lakefile.toml", "lakefile.lean")} if path else {}
-    return digest([str(path), files, os.environ.get("LEAN_EXE", "lean")])
+    from .environments import executable, runtime_env
+    env = runtime_env(project_id)
+    binaries = {}
+    for name in ("lean", "lake"):
+        binary = executable(name, env)
+        from pathlib import Path
+        info = Path(binary).stat() if binary and Path(binary).is_file() else None
+        binaries[name] = [binary, info.st_size if info else None, info.st_mtime_ns if info else None]
+    return digest([str(path), files, binaries])
 
 
 def _connect():
@@ -81,6 +89,14 @@ def get(filename: str) -> dict:
         and latest["goalHash"] == goal_hash and latest["projectId"] == state["projectId"]
         and latest["environment"] == current_environment)
     state["targetVerified"] = bool(state["verificationCurrent"] and latest["targetVerified"])
+    state["naturalProofSaved"] = bool(proof.get("natural_proof", "").strip())
+    if state["runStatus"] == "completed" and state["targetVerified"] and not state["naturalProofSaved"]:
+        # Older sessions may have finished after Lean without saving prose.
+        # Expose a resumable missing-document state; never start paid model work.
+        state["runStatus"] = "blocked"
+        state["runReason"] = ("Lean 已验证目标，但自然语言证明尚未保存；请继续研究以补齐证明正文。"
+                              if workspace.get_settings()["language"] == "zh" else
+                              "Lean verified the target, but the natural-language proof is missing. Continue research to finish the document.")
     state["phase"] = ("目标已验证，待人工审阅" if state["targetVerified"] else
                       "形式化与证明探索" if state["goal"] else "澄清研究目标")
     if state["targetVerified"] and state["goalReviewed"]:

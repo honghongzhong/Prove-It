@@ -1190,3 +1190,40 @@ body {
   font-size: 42px;
   line-height: 1.2;
 }
+
+/* Settings are organized by responsibility and remain usable on small windows. */
+#dialog { width: min(680px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow: auto; }
+.settings-section { border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 18px 0; }
+.settings-section h3 { margin: 0 0 16px; }
+.settings-section label { margin: 12px 0; }
+.settings-section p { line-height: 1.65; }
+.settings-section input:not([type=checkbox]), .settings-section select { width: 100%; }
+#connection-result:empty { display: none; }
+[hidden] { display: none !important; }
+
+.connection-status { font-size: 11px; color: var(--muted); white-space: normal; text-align: left; }
+
+#dialog:has(.settings-section) { width: min(860px, calc(100vw - 40px)); }
+#dialog:has(.settings-section) form { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 0 18px; }
+#dialog:has(.settings-section) form > h2,
+#dialog:has(.settings-section) form > p,
+#dialog:has(.settings-section) .dialog-actions { grid-column: 1 / -1; }
+#dialog .settings-section { margin: 8px 0; align-self: start; }
+#dialog .dialog-actions { position: sticky; bottom: -28px; background: var(--surface); padding: 14px 0; }
+.project-count { opacity: .6; margin-left: 6px; font-size: 10px; }
+@media (max-width: 700px) { #dialog:has(.settings-section) form { display: block; } }
+
+.environment-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.environment-card { padding: 16px; margin: 0; }
+.environment-card h3 { margin: 0; }
+.environment-card > button { display: block; margin-top: 16px; }
+.environment-job { border-top: 1px solid var(--line); padding: 16px 0; }
+.environment-job progress { width: 85%; margin-right: 12px; accent-color: var(--text); }
+.environment-job pre { max-height: 200px; overflow: auto; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#dialog:has(.environment-presets) { width: min(860px, calc(100vw - 40px)); }
+@media(max-width: 700px) { .environment-presets { grid-template-columns: 1fr; } }
+
+#environment-notice { display: flex; gap: 12px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12px; }
+#environment-notice span { flex: 1; }
+#environment-notice button { white-space: nowrap; }
+.environment-job p { overflow-wrap: anywhere; }

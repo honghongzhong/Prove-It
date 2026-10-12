@@ -4,9 +4,12 @@ import subprocess
 from pathlib import PurePosixPath
 
 allowed_roots = {'proveit', 'ui', 'desktop', 'tools', 'tests', 'skills', '.github'}
-allowed_docs = {'INSTALL.md', 'USAGE.md', 'README.en.md', 'DEVELOPMENT.md'}
+allowed_docs = {'INSTALL.md', 'USAGE.md', 'README.en.md', 'DEVELOPMENT.md', 'LANGUAGE_POLICY.md'}
+allowed_docs |= {name.replace('.md', '.zh-CN.md') for name in allowed_docs if name != 'README.en.md'}
+allowed_docs.add('README.zh-CN.md')
 allowed_files = {'.gitignore', 'README.zh-CN.md', 'README.md', 'LICENSE', 'package.json', 'package-lock.json',
                  'requirements-build.txt', 'app.py', 'CONTRIBUTING.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md', 'docs/assets/workspace.png'}
+allowed_files |= {'CONTRIBUTING.zh-CN.md', 'SECURITY.zh-CN.md', 'THIRD_PARTY_NOTICES.zh-CN.md'}
 patterns = [rb'gh[pousr]_[A-Za-z0-9]{20,}', rb'sk-[A-Za-z0-9_-]{24,}',
             rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',
             rb'[A-Za-z]:[\\/]Users[\\/][^\\/\s"\']+',

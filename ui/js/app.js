@@ -31,6 +31,7 @@ const state = {
   drafts: new Map(),
   collapsedProjects: new Set(),
   checking: false,
+  connectionLabel: "connectionOffline",
 };
 const path = (suffix = "") =>
   `/api/proofs/${encodeURIComponent(state.proof.id)}${suffix}`;
@@ -89,6 +90,7 @@ function options(selected) {
 function dialog(title, html, onSave, label = "save") {
   const d = $("#dialog");
   if (d.open) d.close();
+  d.dataset.panel = "";
   d.innerHTML = `<form><h2>${e(t(title))}</h2>${html}<p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="dialog-cancel">${e(t(onSave ? "cancel" : "close"))}</button>${onSave ? `<button class="primary" type="submit">${e(t(label))}</button>` : ""}</div></form>`;
   $("#dialog-cancel").onclick = () => d.close();
   d.querySelector("form").onsubmit = async (event) => {
@@ -124,7 +126,7 @@ function sidebar() {
     );
     if (query && !rows.length && !name.toLowerCase().includes(query)) return "";
     const collapsed = !query && state.collapsedProjects.has(id);
-    return `<section class="project"><div class="project-head"><button data-project="${e(id || "")}" aria-expanded="${!collapsed}">${collapsed ? "▸" : "▾"} ${e(name)}</button><button data-new-in-project="${e(id || "")}" aria-label="${e(t("newChat"))}">＋</button>${id ? `<button data-rename-project="${e(id)}" aria-label="${e(t("renameProject"))}">···</button>` : ""}</div>${collapsed ? "" : rows.map((p) => `<button class="research-link ${p.id === state.proof?.id ? "active" : ""}" data-proof="${e(p.id)}" title="${e(p.title)}">${e(p.title)}</button>`).join("") || `<div class="project-empty">${e(t("emptyProject"))}</div>`}</section>`;
+    return `<section class="project"><div class="project-head"><button data-project="${e(id || "")}" aria-expanded="${!collapsed}">${collapsed ? "▸" : "▾"} ${e(name)} <small class="project-count">${rows.length}</small></button><button data-new-in-project="${e(id || "")}" aria-label="${e(t("newChat"))}">＋</button>${id ? `<button data-rename-project="${e(id)}" aria-label="${e(t("renameProject"))}">···</button>` : ""}</div>${collapsed ? "" : rows.map((p) => `<button class="research-link ${p.id === state.proof?.id ? "active" : ""}" data-proof="${e(p.id)}" title="${e(p.title)}">${e(p.title)}</button>`).join("") || `<div class="project-empty">${e(t("emptyProject"))}</div>`}</section>`;
   };
   $("#project-list").innerHTML =
     state.projects.map((p) => group(p.id, p.name)).join("") +
@@ -135,6 +137,7 @@ function sidebar() {
 }
 function chrome() {
   translate();
+  $("#connection-status").textContent = t(state.connectionLabel);
   decorateIcons();
   document.documentElement.dataset.theme = state.settings.theme || "light";
   $("#title").textContent = state.proof?.title || "ProveIt";
@@ -586,6 +589,9 @@ async function action(name) {
       await check();
       break;
     case "environment":
+      await openEnvironments();
+      break;
+    case "registerEnvironment":
       dialog(
         "addEnvironment",
         field("name", "envName", "", "input", "required") +
@@ -715,13 +721,21 @@ $("#project-list").onclick = (event) => {
         state.projects.find((p) => p.id === id).name,
         "input",
         'required maxlength="100"',
-      ),
+      ) + `<p class="muted">${e(t("deleteProjectHint"))}</p><button type="button" id="remove-project">${e(t("deleteProject"))}</button>`,
       async (f) => {
         await api("/api/projects/" + id, "PUT", { name: f.get("name") });
         await list();
         chrome();
       },
     );
+    $("#remove-project").onclick = async () => {
+      try {
+        await api("/api/projects/" + id, "DELETE");
+        if (state.project === id) state.project = null;
+        if (state.proof?.project_id === id) state.proof.project_id = null;
+        $("#dialog").close(); await list(); render();
+      } catch (err) { fail(err); }
+    };
   }
 };
 $("#new-project").onclick = () =>
@@ -774,23 +788,92 @@ for (const b of document.querySelectorAll("[data-view]"))
 $("#toggle-sidebar").onclick = () =>
   document.body.classList.toggle("sidebar-open");
 $("#scrim").onclick = () => document.body.classList.remove("sidebar-open");
-$("#settings").onclick = () =>
-  dialog(
-    "settings",
-    `<label>${e(t("language"))}<select name="language"><option value="zh" ${getLanguage() === "zh" ? "selected" : ""}>中文</option><option value="en" ${getLanguage() === "en" ? "selected" : ""}>English</option></select></label><label>${e(t("theme"))}<select name="theme"><option value="light" ${state.settings.theme === "light" ? "selected" : ""}>${e(t("light"))}</option><option value="dark" ${state.settings.theme === "dark" ? "selected" : ""}>${e(t("dark"))}</option></select></label><label><input name="autoSave" type="checkbox" ${state.settings.autoSave ? "checked" : ""}> ${e(t("autoSave"))}</label><label><input name="autoVerify" type="checkbox" ${state.settings.autoVerify ? "checked" : ""}> ${e(t("autoVerify"))}</label><p>${e(t("settingsHint"))}</p>`,
+function openSettings(setup = false) {
+  dialog(setup ? "connectionSetup" : "settings",
+    `<p>${e(t("connectionHint"))}</p><section class="settings-section"><h3>${e(t("modelSettings"))}</h3>
+    <label>${e(t("provider"))}<select name="provider"><option value="codex" ${state.settings.provider === "codex" ? "selected" : ""}>Codex</option><option value="api" ${state.settings.provider === "api" ? "selected" : ""}>${e(t("customApi"))}</option></select></label>
+    <div id="api-settings">${field("baseUrl", "baseUrl", state.settings.baseUrl)}${field("apiModel", "apiModel", state.settings.apiModel)}${field("apiKey", "apiKey", "", "input", 'type="password" autocomplete="new-password"')}<label><input type="checkbox" name="clearKey"> ${e(t("clearKey"))}</label></div>
+    <div id="codex-settings">${field("codexPath", "codexPath", state.settings.codexPath)}<p class="muted">${e(t("codexGuide"))}</p></div>
+    <button type="button" id="test-connection">${e(t("testConnection"))}</button><p id="connection-result" role="status"></p></section>
+    <section class="settings-section"><h3>${e(t("generalSettings"))}</h3><label>${e(t("language"))}<select name="language"><option value="zh" ${getLanguage() === "zh" ? "selected" : ""}>中文</option><option value="en" ${getLanguage() === "en" ? "selected" : ""}>English</option></select></label><label>${e(t("theme"))}<select name="theme"><option value="light" ${state.settings.theme === "light" ? "selected" : ""}>${e(t("light"))}</option><option value="dark" ${state.settings.theme === "dark" ? "selected" : ""}>${e(t("dark"))}</option></select></label><label><input name="autoSave" type="checkbox" ${state.settings.autoSave ? "checked" : ""}> ${e(t("autoSave"))}</label><label><input name="autoVerify" type="checkbox" ${state.settings.autoVerify ? "checked" : ""}> ${e(t("autoVerify"))}</label><label><input name="autoSetupLean" type="checkbox" ${state.settings.autoSetupLean !== false ? "checked" : ""}> ${e(t("autoSetupLean"))}</label>${field("environmentProxy", "environmentProxy", state.settings.environmentProxy || "")}</section>`,
     async (f) => {
-      state.settings = (
-        await api("/api/settings", "PUT", {
-          language: f.get("language"),
-          theme: f.get("theme"),
-          autoSave: f.has("autoSave"),
-          autoVerify: f.has("autoVerify"),
-        })
-      ).settings;
+      const payload = Object.fromEntries(f);
+      payload.autoSave = f.has("autoSave"); payload.autoVerify = f.has("autoVerify"); payload.autoSetupLean = f.has("autoSetupLean");
+      if (f.has("clearKey")) payload.apiKey = "";
+      else if (!payload.apiKey) delete payload.apiKey;
+      state.settings = (await api("/api/settings", "PUT", payload)).settings;
       setLanguage(state.settings.language);
-      render();
-    },
-  );
+      await loadModels();
+      state.connectionLabel = state.settings.provider === "api" ? "customApi" : "connectionOffline";
+    });
+  const select = $('#dialog [name="provider"]');
+  const toggle = () => { $("#api-settings").hidden = select.value !== "api"; $("#codex-settings").hidden = select.value !== "codex"; };
+  select.onchange = toggle; toggle();
+  $("#test-connection").onclick = async (event) => {
+    event.target.disabled = true;
+    try {
+      const f = new FormData($('#dialog form'));
+      const payload = Object.fromEntries(f);
+      payload.autoSave = f.has("autoSave"); payload.autoVerify = f.has("autoVerify"); payload.autoSetupLean = f.has("autoSetupLean");
+      if (f.has("clearKey")) payload.apiKey = "";
+      else if (!payload.apiKey) delete payload.apiKey;
+      state.settings = (await api("/api/settings", "PUT", payload)).settings;
+      setLanguage(state.settings.language);
+      $('#dialog [name="apiKey"]').value = "";
+      $('#dialog [name="clearKey"]').checked = false;
+      await api("/api/connection/test", "POST", {});
+      await loadModels();
+      $("#connection-result").textContent = t("connectionReady"); state.connectionLabel = "connectionReady"; $("#connection-status").textContent = t(state.connectionLabel); }
+    catch (err) { $("#connection-result").textContent = err.message; }
+    finally { event.target.disabled = false; }
+  };
+}
+$("#settings").onclick = () => openSettings();
+$("#environments").onclick = () => openEnvironments().catch(fail);
+$("#environment-notice-open").onclick = () => openEnvironments().catch(fail);
+let environmentTimer;
+async function openEnvironments() {
+  const info = (await api("/api/lean/environments")).environments;
+  const heading = (preset, title, hint, ready) => `<section class="card environment-card"><div class="row spread"><h3>${e(t(title))}</h3><span data-env-state="${preset}" class="badge ${ready ? "success" : ""}">${e(t(ready ? "environmentReady" : "environmentMissing"))}</span></div><p>${e(t(hint))}</p><small>Lean ${e(info.presets.find(p => p.id === preset)?.version || "")}</small><button type="button" class="primary" data-setup-env="${preset}">${e(t("setupEnvironment"))}</button></section>`;
+  dialog("environmentManager", `<p>${e(t("environmentIntro"))}</p><div class="environment-presets">${heading("core", "environmentCore", "environmentCoreHint", info.leanReady)}${heading("mathlib", "environmentMathlib", "environmentMathlibHint", Boolean(info.installed.mathlib?.smokeVerified))}</div><p>${e(t("environmentJobHint"))}</p><div id="environment-jobs"></div><button type="button" id="register-environment">${e(t("addEnvironment"))}</button>`);
+  const d = $("#dialog"); d.dataset.panel = "environments";
+  const renderJobs = (jobs) => {
+    const current = Object.fromEntries(jobs.map(j => [j.preset, j]));
+    d.querySelectorAll('[data-setup-env]').forEach(b => b.disabled = ['running', 'queued'].includes(current[b.dataset.setupEnv]?.status));
+    for (const [preset, job] of Object.entries(current)) {
+      if (job.status === "ready") {
+        const badge = d.querySelector(`[data-env-state="${preset}"]`);
+        if (badge) { badge.textContent = t("environmentReady"); badge.classList.add("success"); }
+        const core = d.querySelector('[data-env-state="core"]');
+        if (core) { core.textContent = t("environmentReady"); core.classList.add("success"); }
+      }
+    }
+    $("#environment-jobs").innerHTML = jobs.slice(-4).reverse().map(job => `<section class="environment-job"><div class="row spread"><strong>${e(t(job.preset === "core" ? "environmentCore" : "environmentMathlib"))} · ${e(t("env_" + job.stage))}</strong>${["running", "queued"].includes(job.status) ? `<button type="button" data-cancel-env="${e(job.id)}">${e(t("cancel"))}</button>` : ""}</div>${job.progress !== null ? `<progress max="100" value="${Number(job.progress)}"></progress><small>${Number(job.progress)}%</small>` : ""}${job.totalBytes ? `<p>${(job.downloadedBytes / 1e6).toFixed(1)} / ${(job.totalBytes / 1e6).toFixed(1)} MB</p>` : ""}${job.error ? `<p class="danger">${e(job.error)}</p>` : ""}${job.result?.path ? `<p class="muted">${e(job.result.path)}</p>` : ""}<details><summary>${e(t("rawEvidence"))}</summary><pre>${e(job.log.join("\n"))}</pre></details></section>`).join("");
+    d.querySelectorAll('[data-cancel-env]').forEach(b => b.onclick = () => api('/api/lean/environments/cancel', 'POST', {jobId:b.dataset.cancelEnv}).catch(fail));
+  };
+  renderJobs(info.jobs);
+  d.querySelectorAll('[data-setup-env]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try { await api('/api/lean/environments/setup', 'POST', {preset:b.dataset.setupEnv}); await poll(); }
+    catch (err) { fail(err); b.disabled = false; }
+  });
+  $("#register-environment").onclick = () => action("registerEnvironment").catch(fail);
+  let previousReady = info.jobs.filter(j=>j.status === 'ready').length;
+  async function poll() {
+    clearTimeout(environmentTimer);
+    if (!d.open || d.dataset.panel !== "environments") return;
+    try {
+      const jobs = (await api('/api/lean/environments/jobs')).jobs;
+      if (!d.open || d.dataset.panel !== "environments") return;
+      renderJobs(jobs);
+      const ready = jobs.filter(j=>j.status === 'ready').length;
+      if (ready !== previousReady) { state.envs = (await api('/api/lean/projects')).projects; previousReady = ready; }
+    } catch (err) { fail(err); }
+    if (d.open && d.dataset.panel === "environments") environmentTimer = setTimeout(poll, 1500);
+  }
+  environmentTimer = setTimeout(poll, 1500);
+}
+
 $("#trash").onclick = async () => {
   try {
     const rows = (await api("/api/trash")).proofs;
@@ -846,6 +929,7 @@ function decorateIcons() {
     "#new-project": ["folder", "newProject", true],
     "#settings": ["settings", "settings", false],
     "#trash": ["trash", "trash", false],
+    "#environments": ["code", "manageEnvironments", false],
     "#send": ["send", "send", true],
     "#pause": ["pause", "pause", true],
     "#toggle-sidebar": ["sidebar", "toggleSidebar", true],
@@ -868,7 +952,7 @@ function decorateIcons() {
   renderModelChoices();
 }
 function renderModelChoices() {
-  const selected = state.settings.model || "";
+  const selected = state.settings.provider === "api" ? state.settings.apiModel : state.settings.model || "";
   $("#model-select").innerHTML =
     `<option value="">${e(t("defaultModel"))}</option>` +
     state.models
@@ -897,6 +981,16 @@ function renderModelChoices() {
   $("#effort-select").setAttribute("aria-label", t("effort"));
 }
 async function loadModels() {
+  if (state.settings.provider === "api") {
+    state.models = [{model: state.settings.apiModel, displayName: state.settings.apiModel}];
+    $("#model-retry").hidden = true;
+    renderModelChoices();
+    $("#model-select").disabled = true;
+    $("#effort-select").hidden = true;
+    return;
+  }
+  $("#model-select").disabled = false;
+  $("#effort-select").hidden = false;
   try {
     state.models = (await api("/api/codex/models")).models;
     $("#model-retry").hidden = true;
@@ -946,10 +1040,25 @@ async function init() {
   if (active && state.proofs.some((p) => p.id === active))
     await openProof(active);
   else render();
-  loadModels();
+  api("/api/lean/environments").then(r => { $("#environment-notice").hidden = r.environments.leanReady; }).catch(fail);
+  const connection = await api("/api/connection");
+  $("#connection-status").onclick = () => openSettings();
+  if (state.settings.provider === "api" && connection.keyConfigured && state.settings.apiModel) {
+    await loadModels();
+    state.connectionLabel = "customApi"; $("#connection-status").textContent = t(state.connectionLabel);
+  } else {
+    try { await api("/api/connection/test", "POST", {}); await loadModels(); state.connectionLabel = "connectionReady"; $("#connection-status").textContent = t(state.connectionLabel); }
+    catch { openSettings(true); }
+  }
   const events = new EventSource("/api/events");
   events.onmessage = (event) => {
     const { method, params: p = {} } = JSON.parse(event.data);
+    if (method === "environment/progress") {
+      if (["running", "queued"].includes(p.job?.status)) $("#run-state").textContent = t("env_" + p.job.stage);
+      if (p.job?.status === "ready") { $("#environment-notice").hidden = true; }
+      if (p.job?.status === "ready") api("/api/lean/projects").then(r => { state.envs = r.projects; scheduleRefresh(); }).catch(fail);
+      return;
+    }
     if (method === "turn/started") state.runningProof = p.proofId;
     if (
       ["research/idle", "bridge/closed"].includes(method) &&

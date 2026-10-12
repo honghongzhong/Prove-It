@@ -10,12 +10,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from .codex_bridge import CodexBridge
+from .codex_bridge import CodexBridge, find_codex
+from . import model_api, environments
 from .lean import ROOT, list_projects, add_project, verify
 from . import workspace, research
 
 STATIC = ROOT / "ui"
 codex = CodexBridge()
+environments.manager.publisher = codex.publish
 
 
 def proof_record(filename):
@@ -108,13 +110,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/codex/models":
             self._api_call("models", codex.models)
             return
+        if path == "/api/lean/environments/jobs":
+            self._json({"jobs": environments.manager.jobs()})
+            return
+        if path == "/api/lean/environments":
+            self._api_call("environments", environments.status)
+            return
         if path == "/api/lean/projects":
             self._json({"projects": list_projects()})
             return
         if path == "/api/health":
             import shutil
             import os
-            self._json({"codexInstalled": bool(shutil.which(os.environ.get("CODEX_EXE", "codex"))),
+            self._json({"codexInstalled": bool(find_codex()),
                         "leanInstalled": bool(shutil.which(os.environ.get("LEAN_EXE", "lean"))),
                         "lakeInstalled": bool(shutil.which("lake")), "projects": list_projects()})
             return
@@ -126,6 +134,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/trash":
             self._api_call("proofs", workspace.list_trash)
+            return
+        if path == "/api/connection":
+            config = workspace.get_settings()
+            self._json({"provider": config["provider"], "keyConfigured": bool(model_api.read_key()), "connected": codex.status()["connected"]})
             return
         if path == "/api/settings":
             self._api_call("settings", workspace.get_settings)
@@ -181,6 +193,18 @@ class Handler(BaseHTTPRequestHandler):
                 with codex.artifact_lock:
                     self._json({"workflow": research.restore(parts[2], int(parts[4]), body.get("revision"))})
                 return
+            if path == "/api/connection/test":
+                config = workspace.get_settings()
+                if config["provider"] == "api":
+                    model_api.complete(config, [{"role": "user", "content": "Reply OK."}])
+                    self._json({"ready": True, "provider": "api"})
+                else:
+                    codex.start()
+                    account = codex.call("account/read", {"refreshToken": False})
+                    if account.get("requiresOpenaiAuth") and not account.get("account"):
+                        raise ValueError("Run codex login in a terminal, then retry the connection.")
+                    self._json({"ready": True, "provider": "codex"})
+                return
             if path == "/api/codex/start":
                 codex.start()
                 self._json({"connected": True, "threadId": codex.thread_id})
@@ -197,8 +221,14 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("请先输入一条消息。")
                 if not context.strip() or len(context) > 250_000:
                     raise ValueError("当前命题与 Lean 代码上下文为空或过长。")
-                queued = codex.send_message(message, context, project_id, proof_id, "en" if body.get("language") == "en" else "zh", str(body.get("model", "")), str(body.get("effort", "")))
+                queued = codex.send_message(message, context, project_id, proof_id, "zh" if body.get("language") == "zh" else "en", str(body.get("model", "")), str(body.get("effort", "")))
                 self._json({"accepted": True, "queued": queued}, 202)
+                return
+            if path == "/api/lean/environments/setup":
+                self._json({"job": environments.manager.start(str(body.get("preset", "core")))}, 202)
+                return
+            if path == "/api/lean/environments/cancel":
+                self._json({"job": environments.manager.cancel(str(body.get("jobId", "")))})
                 return
             if path == "/api/lean/verify":
                 source = str(body.get("source", ""))
@@ -206,6 +236,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not source.strip() or len(source) > 200_000:
                     raise ValueError("Lean 代码为空或过长。")
                 filename = str(body.get("filename", ""))
+                project_id = environments.prepare(source, project_id)
                 if filename:
                     research.set_runtime(filename, projectId=project_id)
                     result = research.check(filename, source, project_id)
@@ -293,7 +324,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(workspace.save_research_state(parts[2], body.get("events", []), str(body.get("summary", ""))))
                 return
             if path == "/api/settings":
-                self._json({"settings": workspace.save_settings(body)})
+                if codex.busy_turn:
+                    raise ValueError("Pause research before changing settings.")
+                config = {**workspace.get_settings(), **body}
+                if config.get("provider") == "api":
+                    model_api.validate(config)
+                if "environmentProxy" in body:
+                    environments.validate_proxy(str(body["environmentProxy"]))
+                previous = workspace.get_settings()
+                model_api.save_key(body.get("apiKey"))
+                saved = workspace.save_settings(body)
+                if any(previous.get(key) != saved.get(key) for key in ("provider", "codexPath")):
+                    codex.close()
+                    codex.models_cache = []
+                self._json({"settings": saved})
                 return
             self._json({"error": "Not found"}, 404)
         except (ValueError, OSError, sqlite3.Error, json.JSONDecodeError) as exc:
@@ -303,6 +347,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path = unquote(urlparse(self.path).path)
             parts = path.strip("/").split("/")
+            if len(parts) == 3 and parts[:2] == ["api", "projects"]:
+                self._json(workspace.remove_research_project(parts[2]))
+                return
             if len(parts) == 3 and parts[:2] == ["api", "proofs"]:
                 if codex.busy_turn and codex.current_proof_id == parts[2]:
                     raise ValueError("请先暂停当前研究，待轮次结束后移至回收站。")
@@ -341,6 +388,7 @@ def serve(port: int = 8765, *, desktop: bool = False) -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        environments.manager.shutdown()
         codex.pause()
         codex.close()
         server.server_close()
