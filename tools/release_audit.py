@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 
 allowed_roots = {'proveit', 'ui', 'desktop', 'tools', 'tests', 'skills', '.github'}
 allowed_docs = {'INSTALL.md', 'USAGE.md', 'README.en.md', 'DEVELOPMENT.md'}
-allowed_files = {'.gitignore', 'README.md', 'LICENSE', 'package.json', 'package-lock.json',
+allowed_files = {'.gitignore', 'README.zh-CN.md', 'README.md', 'LICENSE', 'package.json', 'package-lock.json',
                  'requirements-build.txt', 'app.py', 'CONTRIBUTING.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md', 'docs/assets/workspace.png'}
 patterns = [rb'gh[pousr]_[A-Za-z0-9]{20,}', rb'sk-[A-Za-z0-9_-]{24,}',
             rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',

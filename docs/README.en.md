@@ -1,8 +1,10 @@
 # ProveIt
 
+The full English project overview is now the default [README](../README.md).
+
 ProveIt is a local AI-assisted mathematical research workspace connecting Codex and Lean 4. Researchers set goals and guide the argument; Codex edits structured research steps, prose and Lean source, then iterates on real verification feedback.
 
-[Download Windows x64](https://github.com/honghongzhong/Prove-It/releases/latest) · [Setup](INSTALL.md) · [Build](DEVELOPMENT.md) · [中文](../README.md)
+[Download Windows x64](https://github.com/honghongzhong/Prove-It/releases/latest) · [Setup](INSTALL.md) · [Build](DEVELOPMENT.md) · [中文](../README.zh-CN.md)
 
 Install the Setup EXE or extract the entire ZIP. Python is bundled; native Lean/Elan and an authenticated Codex CLI are required separately. Mathlib is optional and uses your existing Lake project. The first release is unsigned. Verify the release checksums. macOS and Linux desktop packages are not provided.
 

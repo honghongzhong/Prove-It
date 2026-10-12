@@ -1,33 +1,50 @@
 # ProveIt
 
-**面向数学研究者的 AI 辅助工作台 · An AI-assisted mathematical research workspace**
+**An AI-assisted mathematical research workspace connecting Codex and Lean 4.**
 
-[下载安装包 / Download](https://github.com/honghongzhong/Prove-It/releases/latest) · [安装说明](docs/INSTALL.md) · [使用手册](docs/USAGE.md) · [English](docs/README.en.md) · [构建与发布](docs/DEVELOPMENT.md)
+[Download](https://github.com/honghongzhong/Prove-It/releases/latest) · [Installation](docs/INSTALL.md) · [User guide](docs/USAGE.md) · [Build from source](docs/DEVELOPMENT.md) · [简体中文](README.zh-CN.md)
 
-ProveIt 连接 **Codex** 的研究与编码能力和 **Lean 4** 的形式化检查。研究者提出问题、澄清假设、指明方向；AI 保存目标、分解步骤、修订自然语言论证与 Lean 代码，并根据真实诊断继续迭代。
+ProveIt brings Codex's reasoning and coding capabilities into a human-guided mathematical workflow. Researchers pose questions, clarify assumptions and choose directions. The AI maintains structured goals, proof steps, natural-language arguments and Lean code, then iterates on actual verification feedback.
 
 ![ProveIt desktop workspace](docs/assets/workspace.png)
 
-## 下载与启动
+## Download and run
 
-Windows x64 用户从 [Releases](https://github.com/honghongzhong/Prove-It/releases) 下载 `ProveIt-*-windows-x64-setup.exe`。也提供 ZIP 免安装版：完整解压后运行 `ProveIt.exe`，不要单独移动 EXE。
+For **Windows x64**, download `ProveIt-*-windows-x64-setup.exe` from [Releases](https://github.com/honghongzhong/Prove-It/releases). A ZIP distribution is also available: extract the entire archive and run `ProveIt.exe`. Do not move the executable out of its accompanying files.
 
-安装包内置 Electron 与 Python 后端，**无需另装 Python**。需要自行安装 **Lean 4 / Elan** 和 **已登录的 Codex CLI**。Mathlib 是可选的外部 Lake 项目。安装与排错见 [INSTALL.md](docs/INSTALL.md)。当前发布 Windows x64；未发布 macOS / Linux 桌面安装包。
+The desktop package includes Electron and the Python backend. **You do not need to install Python.** Install these tools separately:
 
-本版未使用代码签名证书，Windows 可能显示未知发布者提示。请核对本仓库发布页及 SHA-256；不要关闭系统安全防护。ProveIt 不是 OpenAI 或 Lean 的官方产品。
+- **Lean 4 / Elan**, available to native Windows processes.
+- **Codex CLI**, authenticated with your own account.
+- Optionally, a prepared **Mathlib / Lake project** for library-dependent research.
 
-## 工作区
+See the [installation guide](docs/INSTALL.md) for setup, custom executable paths and troubleshooting. This release provides Windows x64 packages; macOS and Linux desktop installers are not included.
 
-- **项目侧栏**：创建、重命名、搜索和归类研究，回收站可恢复删除的研究。
-- **对话**：选择模型及思考深度，实时查看回复与穿插的工具调用；随时补充方向、暂停或继续。
-- **研究**：自然语言目标、假设、完整形式化目标、证明路线和正文；独立人工审阅状态。
-- **Lean**：源码、环境、真实检查、诊断及与当前产物绑定的证据。
-- **导出**：Lean 源码、排版 Markdown、包含修订历史的 JSON。
-- **显示**：中英文、黑白双主题、本地字体与 KaTeX 公式渲染。
+The release is **unsigned**, so Windows may display an unknown-publisher prompt. Obtain files from this repository's release page and compare their hashes with `SHA256SUMS.txt`. Do not disable operating-system security protections. ProveIt is not an official OpenAI or Lean product.
 
-## 从源码运行
+## Workspace
 
-需要 Python 3.11+，后端只使用标准库：
+- **Project sidebar:** create, rename, search and organize research conversations; restore deleted research from Trash.
+- **Conversation:** choose a model and reasoning effort, follow streamed responses and interleaved tool calls, give new directions, pause or continue.
+- **Research:** manage the natural-language goal, assumptions, complete formal target, proof outline and written argument. Human review is recorded separately.
+- **Lean:** edit source, select the verification environment and inspect real diagnostics and evidence tied to the current artifacts.
+- **Export:** save Lean source, a readable Markdown report or a JSON record containing revision history.
+- **Appearance:** English and Chinese interfaces, light and dark themes, locally hosted fonts and KaTeX math rendering.
+
+## Research workflow
+
+1. Describe the mathematical question and any constraints or preferred methods.
+2. Review the AI's proposed statement, quantifiers and assumptions before approving its interpretation.
+3. Break the argument into steps and refine the natural-language proof alongside Lean code.
+4. Run Lean, inspect actual diagnostics and iterate on saved candidates.
+5. Give further direction whenever needed. The AI cannot approve human review on your behalf.
+6. Export the work, including unresolved steps and the current verification status.
+
+For a first check, ask ProveIt to prove that every natural number satisfies `n + 0 = n` using core Lean. The [user guide](docs/USAGE.md) also provides a complete manual test target and explains backup and recovery.
+
+## Run from source
+
+The Python backend uses only the standard library and requires Python 3.11+:
 
 ```powershell
 git clone https://github.com/honghongzhong/Prove-It.git
@@ -38,24 +55,26 @@ codex login
 python app.py
 ```
 
-打开 http://127.0.0.1:8765 。桌面开发和安装包构建见 [开发说明](docs/DEVELOPMENT.md)。
+Open http://127.0.0.1:8765. For desktop development and installer builds, see [DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-## 验证边界
+## What verification means
 
-只有实际运行 Lean、完整登记目标类型成立、公理依赖通过审计，才标记形式目标已验证。局部引理、有限实例和候选编译成功不会替代完整目标。拒绝 `sorryAx` 和额外公理；接受的常用基础公理为 `propext`、`Classical.choice`、`Quot.sound`。修改源码、目标或环境会使旧证据过期。
+A target is marked verified only after Lean actually accepts the complete registered proposition and its axiom audit passes. Compiling a candidate, proving a helper lemma or checking finite examples does **not** establish the full research target.
 
-**Lean 验证编码后的命题，不验证自然语言翻译的忠实性、假设的合理性、研究的新颖性或意义。** 这些由研究者审阅。ProveIt 不保证 AI 能解决提出的数学问题。
+The audit rejects `sorryAx` and additional axioms. The accepted standard foundational axioms are `propext`, `Classical.choice` and `Quot.sound`. Changing the source, target or selected environment invalidates older evidence.
 
-## 数据与隐私
+**Lean checks the encoded proposition. It does not establish the fidelity of a natural-language translation, the suitability of assumptions, novelty or mathematical significance.** These remain human review tasks. ProveIt does not guarantee that AI can solve a proposed problem.
 
-桌面版研究保存在 `%APPDATA%/ProveIt/workspace`，与安装目录分开；源码版默认保存在仓库本地 `proofs/` 与 `.proveit/`。详细备份与迁移见使用手册。
+## Data and privacy
 
-仓库和安装包不包含作者的研究、聊天、账号、数据库、日志、Lean/Mathlib 工作目录或 Codex 凭据。`.gitignore`、安装包资源白名单和发布检查共同限制发布内容。
+Desktop research is stored in `%APPDATA%/ProveIt/workspace`, separately from application files. Source mode stores it locally under `proofs/` and `.proveit/` by default. Quit the app before backing up the entire workspace; see the user guide for migration instructions.
 
-Codex 会接收你主动提交的研究及相关上下文，并按你自己的账号、模型提供方和配置处理。ProveIt 本身不增加遥测，也不收集登录密码。Lean 元编程、Lake 项目及 Codex 工具可能执行本机代码：仅用于可信本地研究环境，不是执行不可信代码的安全沙箱；不要公开转发后端端口。
+The repository and installers contain no author's research, conversations, account credentials, databases, logs or local Lean/Mathlib workspaces. Git ignore rules, explicit packaging resource lists and release checks restrict what is published.
 
-## 贡献与许可证
+Codex receives the research and context you submit under your own account, provider and configuration. ProveIt adds no telemetry and does not collect login passwords. Lean metaprograms, Lake projects and Codex tools can execute local code: this is a **trusted local research environment**, not a sandbox for untrusted code. Do not publicly forward the backend port.
 
-欢迎通过 [Issues](https://github.com/honghongzhong/Prove-It/issues) 提交复现步骤，上传前删除研究内容、令牌和本地路径。贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+## Contributing and license
 
-沿用仓库原有 [MIT License](LICENSE)。依赖许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[Issues](https://github.com/honghongzhong/Prove-It/issues) and focused contributions are welcome. Remove private research, tokens and local paths from reports. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+Released under the repository's existing [MIT License](LICENSE). Third-party license information is retained in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the distributed dependencies.
