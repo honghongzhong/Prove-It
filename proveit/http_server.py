@@ -114,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"jobs": environments.manager.jobs()})
             return
         if path == "/api/lean/environments":
-            self._api_call("environments", environments.status)
+            self._api_call("environments", environments.status_snapshot)
             return
         if path == "/api/lean/projects":
             self._json({"projects": list_projects()})

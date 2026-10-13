@@ -123,6 +123,40 @@ def status() -> dict:
     return {"leanReady": bool(lean_version and lake_version), "leanVersion": lean_version, "lakeVersion": lake_version, "lean": lean, "lake": lake, "installed": installed, "presets": [{"id": k, **v} for k, v in PRESETS.items()], "jobs": manager.jobs(), "automatic": workspace.get_settings().get("autoSetupLean", True)}
 
 
+_status_lock = threading.Lock()
+_status_cache = {}
+_status_pending = set()
+
+
+def status_snapshot() -> dict:
+    """Serve UI state immediately; deduplicate slow executable probes in background."""
+    installed = manifest()
+    env = runtime_env()
+    lean, lake = executable("lean", env), executable("lake", env)
+    key = (str(root()), lean, lake, json.dumps(installed, sort_keys=True))
+    with _status_lock:
+        cached = _status_cache.get(key)
+        if (not cached or time.monotonic() - cached[0] > 30) and key not in _status_pending:
+            _status_pending.add(key)
+            def probe():
+                try:
+                    versions = (_quick_version(lean), _quick_version(lake))
+                    with _status_lock:
+                        _status_cache.clear()
+                        _status_cache[key] = (time.monotonic(), versions)
+                finally:
+                    with _status_lock:
+                        _status_pending.discard(key)
+            threading.Thread(target=probe, daemon=True).start()
+        versions = cached[1] if cached else ("", "")
+        checking = key in _status_pending
+    return {"leanReady": bool(all(versions)), "checking": checking,
+            "leanVersion": versions[0], "lakeVersion": versions[1],
+            "lean": lean, "lake": lake, "installed": installed,
+            "presets": [{"id": k, **v} for k, v in PRESETS.items()],
+            "jobs": manager.jobs(), "automatic": workspace.get_settings().get("autoSetupLean", True)}
+
+
 class EnvironmentManager:
     def __init__(self):
         self.lock = threading.RLock()

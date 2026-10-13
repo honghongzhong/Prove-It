@@ -36,6 +36,33 @@ class EnvironmentTests(unittest.TestCase):
         self.manager._persist()
         return 'test'
 
+    def test_ui_snapshot_does_not_wait_for_slow_version_probes(self):
+        entered, release = threading.Event(), threading.Event()
+        def slow_version(command):
+            entered.set()
+            release.wait(3)
+            return 'Lean version 4.34.1'
+        with patch.object(environments, '_quick_version', side_effect=slow_version) as probe:
+            try:
+                started = time.monotonic()
+                snapshot = environments.status_snapshot()
+                self.assertLess(time.monotonic() - started, .5)
+                self.assertTrue(snapshot['checking'])
+                self.assertFalse(snapshot['leanReady'])
+                self.assertTrue(entered.wait(1))
+                for _ in range(5):
+                    self.assertTrue(environments.status_snapshot()['checking'])
+                self.assertEqual(probe.call_count, 1)
+            finally:
+                release.set()
+            deadline = time.monotonic() + 3
+            while environments.status_snapshot()['checking'] and time.monotonic() < deadline:
+                time.sleep(.01)
+            snapshot = environments.status_snapshot()
+            self.assertFalse(snapshot['checking'])
+            self.assertTrue(snapshot['leanReady'])
+            self.assertEqual(probe.call_count, 2)
+
     def test_core_reuses_installed_lean_and_actually_checks(self):
         result = self.manager.wait('core')
         self.assertTrue(result['smokeVerified'])

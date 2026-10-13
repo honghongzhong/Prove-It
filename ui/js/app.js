@@ -187,6 +187,12 @@ function chrome() {
 }
 // Preserve the editor cursor and scroll position across streamed artifact updates.
 function render() {
+  const content = $("#content");
+  const context = `${state.proof?.id || ""}:${state.view}`;
+  const disclosureKey = (el, index) => el.closest('[data-event]')?.dataset.event || el.dataset.disclosure || `detail-${index}`;
+  const expanded = content.dataset.renderContext === context
+    ? new Set([...content.querySelectorAll('details')].flatMap((el, index) => el.open ? [disclosureKey(el, index)] : []))
+    : new Set();
   const editor = $("#source");
   const focused = editor && document.activeElement === editor;
   const selection = focused
@@ -194,6 +200,8 @@ function render() {
     : null;
   const scroll = $("#content").scrollTop;
   draw();
+  content.dataset.renderContext = context;
+  content.querySelectorAll('details').forEach((el, index) => { if (expanded.has(disclosureKey(el, index))) el.open = true; });
   $("#content").scrollTop = scroll;
   if (selection && $("#source")) {
     $("#source").focus();
@@ -242,7 +250,7 @@ function draw() {
   )
     status = "rejected";
   $("#content").innerHTML =
-    `<div class="page"><div class="environment row"><label for="environment">${e(t("environment"))}</label><select id="environment">${state.envs.map((p) => `<option value="${e(p.id)}" ${p.id === w.projectId ? "selected" : ""}>${e(p.id === "standalone" ? t("core") : p.name)}</option>`).join("")}</select>${button("environment", "addEnvironment")}</div><section class="card"><div class="card-head"><div><h2>${e(t("source"))}</h2><p>${e(state.proof.id)}</p></div><div class="row">${button("saveSource", "saveSource")}${button("check", state.checking ? "checking" : "check", `class="primary" ${state.checking ? "disabled" : ""}`)}</div></div><textarea id="source" spellcheck="false" aria-label="${e(t("source"))}">${e(state.source)}</textarea><small>${e(t("sourceHint"))}</small></section><section class="card"><div class="card-head"><h2>${e(t("evidence"))}</h2><span class="badge ${status === "verified" ? "success" : ""}" id="evidence-status">${e(t(status))}</span></div><p id="evidence-description">${e(t(status === "unchecked" ? "evidenceEmpty" : status === "verified" ? "evidencePass" : status === "stale" ? "staleHint" : "boundary"))}</p>${last?.result.diagnostics?.length ? `<h3>${e(t("diagnostics"))}</h3><pre>${e(last.result.diagnostics.map((d) => `${d.line ?? ""}:${d.column ?? ""} ${d.message}`).join("\n\n"))}</pre>` : ""}${last?.result.error ? `<p class="danger">${e(last.result.error)}</p>` : ""}${last ? `<details><summary>${e(t("rawEvidence"))} · ${e(date(last.createdAt))}</summary><pre>${e(JSON.stringify(last, null, 2))}</pre></details>` : ""}</section>${button("discuss", "discuss")}</div>`;
+    `<div class="page"><div class="environment row"><label for="environment">${e(t("environment"))}</label><select id="environment">${state.envs.map((p) => `<option value="${e(p.id)}" ${p.id === w.projectId ? "selected" : ""}>${e(p.id === "standalone" ? t("core") : p.name)}</option>`).join("")}</select>${button("environment", "addEnvironment")}</div><section class="card"><div class="card-head"><div><h2>${e(t("source"))}</h2><p>${e(state.proof.id)}</p></div><div class="row">${button("saveSource", "saveSource")}${button("check", state.checking ? "checking" : "check", `class="primary" ${state.checking ? "disabled" : ""}`)}</div></div><textarea id="source" spellcheck="false" aria-label="${e(t("source"))}">${e(state.source)}</textarea><small>${e(t("sourceHint"))}</small></section><section class="card"><div class="card-head"><h2>${e(t("evidence"))}</h2><span class="badge ${status === "verified" ? "success" : ""}" id="evidence-status">${e(t(status))}</span></div><p id="evidence-description">${e(t(status === "unchecked" ? "evidenceEmpty" : status === "verified" ? "evidencePass" : status === "stale" ? "staleHint" : "boundary"))}</p>${last?.result.diagnostics?.length ? `<h3>${e(t("diagnostics"))}</h3><pre>${e(last.result.diagnostics.map((d) => `${d.line ?? ""}:${d.column ?? ""} ${d.message}`).join("\n\n"))}</pre>` : ""}${last?.result.error ? `<p class="danger">${e(last.result.error)}</p>` : ""}${last ? `<details data-disclosure="verification-record"><summary>${e(t("rawEvidence"))} · ${e(date(last.createdAt))}</summary><pre>${e(JSON.stringify(last, null, 2))}</pre></details>` : ""}</section>${button("discuss", "discuss")}</div>`;
   $("#source").oninput = () => {
     state.source = $("#source").value;
     state.dirty = state.source !== state.proof.source;
@@ -832,11 +840,19 @@ $("#settings").onclick = () => openSettings();
 $("#environments").onclick = () => openEnvironments().catch(fail);
 $("#environment-notice-open").onclick = () => openEnvironments().catch(fail);
 let environmentTimer;
+let environmentPanelGeneration = 0;
 async function openEnvironments() {
-  const info = (await api("/api/lean/environments")).environments;
-  const heading = (preset, title, hint, ready) => `<section class="card environment-card"><div class="row spread"><h3>${e(t(title))}</h3><span data-env-state="${preset}" class="badge ${ready ? "success" : ""}">${e(t(ready ? "environmentReady" : "environmentMissing"))}</span></div><p>${e(t(hint))}</p><small>Lean ${e(info.presets.find(p => p.id === preset)?.version || "")}</small><button type="button" class="primary" data-setup-env="${preset}">${e(t("setupEnvironment"))}</button></section>`;
-  dialog("environmentManager", `<p>${e(t("environmentIntro"))}</p><div class="environment-presets">${heading("core", "environmentCore", "environmentCoreHint", info.leanReady)}${heading("mathlib", "environmentMathlib", "environmentMathlibHint", Boolean(info.installed.mathlib?.smokeVerified))}</div><p>${e(t("environmentJobHint"))}</p><div id="environment-jobs"></div><button type="button" id="register-environment">${e(t("addEnvironment"))}</button>`);
+  const generation = ++environmentPanelGeneration;
+  clearTimeout(environmentTimer);
+  dialog("environmentManager", `<p class="muted">${e(t("loading"))}</p>`);
   const d = $("#dialog"); d.dataset.panel = "environments";
+  const info = (await api("/api/lean/environments")).environments;
+  const isCurrent = () => generation === environmentPanelGeneration && d.open && d.dataset.panel === "environments";
+  if (!isCurrent()) return;
+  const heading = (preset, title, hint, ready) => `<section class="card environment-card"><div class="row spread"><h3>${e(t(title))}</h3><span data-env-state="${preset}" class="badge ${ready ? "success" : ""}">${e(t(ready ? "environmentReady" : info.checking ? "loading" : "environmentMissing"))}</span></div><p>${e(t(hint))}</p><small>Lean ${e(info.presets.find(p => p.id === preset)?.version || "")}</small><button type="button" class="primary" data-setup-env="${preset}">${e(t("setupEnvironment"))}</button></section>`;
+  dialog("environmentManager", `<p>${e(t("environmentIntro"))}</p><div class="environment-presets">${heading("core", "environmentCore", "environmentCoreHint", info.leanReady)}${heading("mathlib", "environmentMathlib", "environmentMathlibHint", Boolean(info.installed.mathlib?.smokeVerified))}</div><p>${e(t("environmentJobHint"))}</p><div id="environment-jobs"></div><button type="button" id="register-environment">${e(t("addEnvironment"))}</button>`);
+  d.dataset.panel = "environments";
+  let jobsSignature = "";
   const renderJobs = (jobs) => {
     const current = Object.fromEntries(jobs.map(j => [j.preset, j]));
     d.querySelectorAll('[data-setup-env]').forEach(b => b.disabled = ['running', 'queued'].includes(current[b.dataset.setupEnv]?.status));
@@ -848,7 +864,12 @@ async function openEnvironments() {
         if (core) { core.textContent = t("environmentReady"); core.classList.add("success"); }
       }
     }
-    $("#environment-jobs").innerHTML = jobs.slice(-4).reverse().map(job => `<section class="environment-job"><div class="row spread"><strong>${e(t(job.preset === "core" ? "environmentCore" : "environmentMathlib"))} · ${e(t("env_" + job.stage))}</strong>${["running", "queued"].includes(job.status) ? `<button type="button" data-cancel-env="${e(job.id)}">${e(t("cancel"))}</button>` : ""}</div>${job.progress !== null ? `<progress max="100" value="${Number(job.progress)}"></progress><small>${Number(job.progress)}%</small>` : ""}${job.totalBytes ? `<p>${(job.downloadedBytes / 1e6).toFixed(1)} / ${(job.totalBytes / 1e6).toFixed(1)} MB</p>` : ""}${job.error ? `<p class="danger">${e(job.error)}</p>` : ""}${job.result?.path ? `<p class="muted">${e(job.result.path)}</p>` : ""}<details><summary>${e(t("rawEvidence"))}</summary><pre>${e(job.log.join("\n"))}</pre></details></section>`).join("");
+    const signature = JSON.stringify(jobs.slice(-4));
+    if (signature === jobsSignature) return;
+    jobsSignature = signature;
+    const expanded = new Set([...d.querySelectorAll('[data-env-job]')].filter(el => el.querySelector('details')?.open).map(el => el.dataset.envJob));
+    $("#environment-jobs").innerHTML = jobs.slice(-4).reverse().map(job => `<section class="environment-job" data-env-job="${e(job.id)}"><div class="row spread"><strong>${e(t(job.preset === "core" ? "environmentCore" : "environmentMathlib"))} · ${e(t("env_" + job.stage))}</strong>${["running", "queued"].includes(job.status) ? `<button type="button" data-cancel-env="${e(job.id)}">${e(t("cancel"))}</button>` : ""}</div>${job.progress !== null ? `<progress max="100" value="${Number(job.progress)}"></progress><small>${Number(job.progress)}%</small>` : ""}${job.totalBytes ? `<p>${(job.downloadedBytes / 1e6).toFixed(1)} / ${(job.totalBytes / 1e6).toFixed(1)} MB</p>` : ""}${job.error ? `<p class="danger">${e(job.error)}</p>` : ""}${job.result?.path ? `<p class="muted">${e(job.result.path)}</p>` : ""}<details><summary>${e(t("rawEvidence"))}</summary><pre>${e(job.log.join("\n"))}</pre></details></section>`).join("");
+    d.querySelectorAll('[data-env-job]').forEach(el => { if (expanded.has(el.dataset.envJob)) el.querySelector('details').open = true; });
     d.querySelectorAll('[data-cancel-env]').forEach(b => b.onclick = () => api('/api/lean/environments/cancel', 'POST', {jobId:b.dataset.cancelEnv}).catch(fail));
   };
   renderJobs(info.jobs);
@@ -858,18 +879,31 @@ async function openEnvironments() {
     catch (err) { fail(err); b.disabled = false; }
   });
   $("#register-environment").onclick = () => action("registerEnvironment").catch(fail);
+  let checking = info.checking;
+  let polling = false;
   let previousReady = info.jobs.filter(j=>j.status === 'ready').length;
   async function poll() {
+    if (!isCurrent() || polling) return;
     clearTimeout(environmentTimer);
-    if (!d.open || d.dataset.panel !== "environments") return;
+    polling = true;
     try {
       const jobs = (await api('/api/lean/environments/jobs')).jobs;
-      if (!d.open || d.dataset.panel !== "environments") return;
+      if (!isCurrent()) return;
+      if (checking) {
+        const latest = (await api('/api/lean/environments')).environments;
+        if (!isCurrent()) return;
+        checking = latest.checking;
+        const badge = d.querySelector('[data-env-state="core"]');
+        badge.textContent = t(latest.leanReady ? "environmentReady" : checking ? "loading" : "environmentMissing");
+        badge.classList.toggle("success", latest.leanReady);
+        $("#environment-notice").hidden = latest.leanReady;
+      }
       renderJobs(jobs);
       const ready = jobs.filter(j=>j.status === 'ready').length;
       if (ready !== previousReady) { state.envs = (await api('/api/lean/projects')).projects; previousReady = ready; }
-    } catch (err) { fail(err); }
-    if (d.open && d.dataset.panel === "environments") environmentTimer = setTimeout(poll, 1500);
+    } catch (err) { if (isCurrent()) fail(err); }
+    finally { polling = false; }
+    if (isCurrent()) environmentTimer = setTimeout(poll, 1500);
   }
   environmentTimer = setTimeout(poll, 1500);
 }
@@ -1040,16 +1074,12 @@ async function init() {
   if (active && state.proofs.some((p) => p.id === active))
     await openProof(active);
   else render();
-  api("/api/lean/environments").then(r => { $("#environment-notice").hidden = r.environments.leanReady; }).catch(fail);
-  const connection = await api("/api/connection");
-  $("#connection-status").onclick = () => openSettings();
-  if (state.settings.provider === "api" && connection.keyConfigured && state.settings.apiModel) {
-    await loadModels();
-    state.connectionLabel = "customApi"; $("#connection-status").textContent = t(state.connectionLabel);
-  } else {
-    try { await api("/api/connection/test", "POST", {}); await loadModels(); state.connectionLabel = "connectionReady"; $("#connection-status").textContent = t(state.connectionLabel); }
-    catch { openSettings(true); }
+  async function refreshEnvironmentNotice() {
+    const { environments: info } = await api("/api/lean/environments");
+    $("#environment-notice").hidden = info.leanReady || info.checking;
+    if (info.checking) setTimeout(() => refreshEnvironmentNotice().catch(fail), 1500);
   }
+  refreshEnvironmentNotice().catch(fail);
   const events = new EventSource("/api/events");
   events.onmessage = (event) => {
     const { method, params: p = {} } = JSON.parse(event.data);
@@ -1134,5 +1164,16 @@ async function init() {
       })
       .catch(fail);
   };
+  (async () => {
+  const connection = await api("/api/connection");
+  $("#connection-status").onclick = () => openSettings();
+  if (state.settings.provider === "api" && connection.keyConfigured && state.settings.apiModel) {
+    await loadModels();
+    state.connectionLabel = "customApi"; $("#connection-status").textContent = t(state.connectionLabel);
+  } else {
+    try { await api("/api/connection/test", "POST", {}); await loadModels(); state.connectionLabel = "connectionReady"; $("#connection-status").textContent = t(state.connectionLabel); }
+    catch { if (!$("#dialog").open) openSettings(true); }
+  }
+  })().catch(fail);
 }
 init().catch(fail);
