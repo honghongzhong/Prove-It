@@ -6,7 +6,7 @@
 
 ProveIt brings Codex's reasoning and coding capabilities into a human-guided mathematical workflow. Researchers pose questions, clarify assumptions and choose directions. The AI maintains structured goals, proof steps, natural-language arguments and Lean code, then iterates on actual verification feedback.
 
-![ProveIt desktop workspace](docs/assets/workspace.png)
+![ProveIt desktop workspace in English](docs/assets/workspace-en.jpg)
 
 ## Download and run
 
