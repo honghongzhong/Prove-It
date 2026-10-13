@@ -1,6 +1,6 @@
 {
   "name": "proveit",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A local mathematical research workspace connecting Codex and Lean",
   "main": "desktop/main.cjs",
   "author": "honghongzhong",
